@@ -1,46 +1,68 @@
-resource "aws_iam_user" "admin_user" {
-  name = "admin"
+locals {
+  admins      = ["admin"]
+  power_users = ["vanya", "yura"]
+}
+
+resource "aws_iam_user" "admin_users" {
+  for_each = toset(local.admins)
+
+  name = each.value
 }
 
 resource "aws_iam_user_policy_attachment" "admin_user_policy" {
-  user       = aws_iam_user.admin_user.name
+  for_each = aws_iam_user.admin_users
+
+  user       = each.value.name
   policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
 }
 
 resource "aws_iam_user_login_profile" "admin_user_profile" {
-  user                    = aws_iam_user.admin_user.name
+  for_each = aws_iam_user.admin_users
+
+  user                    = each.value.name
   password_length         = 16
   password_reset_required = true
 }
 
-# Create power users
-resource "aws_iam_user" "power_user_vanya" {
-  name = "vanya"
+
+resource "aws_iam_group" "power_user_group" {
+  name = "PowerUsers"
 }
 
-resource "aws_iam_user_login_profile" "power_user_vanya_profile" {
-  user                    = aws_iam_user.power_user_vanya.name
-  password_length         = 16
-  password_reset_required = true
-}
-
-resource "aws_iam_user_policy_attachment" "power_user_vanya_policy" {
-  user       = aws_iam_user.power_user_vanya.name
+resource "aws_iam_group_policy_attachment" "power_user_group_policy" {
+  group      = aws_iam_group.power_user_group.name
   policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
 }
 
-resource "aws_iam_user" "power_user_yura" {
-  name = "yura"
+
+resource "aws_iam_user" "power_users" {
+  for_each = toset(local.power_users)
+
+  name = each.value
 }
 
+resource "aws_iam_user_login_profile" "power_user_profiles" {
+  for_each = aws_iam_user.power_users
 
-resource "aws_iam_user_login_profile" "power_user_yura_profile" {
-  user                    = aws_iam_user.power_user_yura.name
+  user                    = each.value.name
   password_length         = 16
   password_reset_required = true
 }
 
-resource "aws_iam_user_policy_attachment" "power_user_yura_policy" {
-  user       = aws_iam_user.power_user_yura.name
-  policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
+resource "aws_iam_group_membership" "power_user_membership" {
+  name  = "power-users"
+  group = aws_iam_group.power_user_group.name
+  users = [for user in aws_iam_user.power_users : user.name]
+}
+
+
+resource "aws_iam_group_policy_attachment" "power_user_mfa_policy" {
+  group      = aws_iam_group.power_user_group.name
+  policy_arn = aws_iam_policy.require_mfa.arn
+}
+
+resource "aws_iam_user_policy_attachment" "require_mfa_for_admin" {
+  for_each   = aws_iam_user.admin_users
+  user       = each.value.name
+  policy_arn = aws_iam_policy.require_mfa.arn
 }
